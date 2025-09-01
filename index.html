@@ -99,7 +99,7 @@
         } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-firestore.js";
 
         // *** เปลี่ยนค่า firebaseConfig ตรงนี้ด้วยค่าจากโปรเจกต์ของคุณเอง ***
-            // Import the functions you need from the SDKs you need
+        // Import the functions you need from the SDKs you need
 import { initializeApp } from "firebase/app";
 import { getAnalytics } from "firebase/analytics";
 // TODO: Add SDKs for Firebase products that you want to use
@@ -150,18 +150,41 @@ const analytics = getAnalytics(app);
             messageBox.className = `block mb-4 p-3 rounded-lg text-center ${type === 'error' ? 'bg-red-200 text-red-700' : 'bg-green-200 text-green-700'}`;
             setTimeout(() => {
                 messageBox.className = 'hidden';
-            }, 3000);
+            }, 5000); // แสดงข้อความ 5 วินาที
+        }
+        
+        // ฟังก์ชันจัดการข้อผิดพลาด Firebase
+        function handleAuthError(error) {
+            let errorMessage = "เกิดข้อผิดพลาดไม่ทราบสาเหตุ";
+            switch (error.code) {
+                case 'auth/weak-password':
+                    errorMessage = "รหัสผ่านต้องมีความยาวอย่างน้อย 6 ตัวอักษร";
+                    break;
+                case 'auth/email-already-in-use':
+                    errorMessage = "อีเมลนี้ถูกใช้ไปแล้ว กรุณาใช้อีเมลอื่น";
+                    break;
+                case 'auth/invalid-email':
+                    errorMessage = "รูปแบบอีเมลไม่ถูกต้อง";
+                    break;
+                case 'auth/user-not-found':
+                case 'auth/wrong-password':
+                    errorMessage = "อีเมลหรือรหัสผ่านไม่ถูกต้อง";
+                    break;
+                default:
+                    errorMessage = "เกิดข้อผิดพลาด: " + error.message;
+            }
+            showMessage(errorMessage, 'error');
         }
 
-        // ฟังชันก์สร้างบัญชีใหม่
+        // ฟังก์ชันสร้างบัญชีใหม่
         signupBtn.addEventListener('click', async () => {
             const email = emailInput.value;
             const password = passwordInput.value;
             try {
                 await createUserWithEmailAndPassword(auth, email, password);
-                showMessage('สร้างบัญชีสำเร็จ! กรุณาเข้าสู่ระบบ', 'success');
+                showMessage('สร้างบัญชีสำเร็จ!', 'success');
             } catch (error) {
-                showMessage(`สร้างบัญชีไม่สำเร็จ: ${error.message}`, 'error');
+                handleAuthError(error);
             }
         });
 
@@ -173,7 +196,7 @@ const analytics = getAnalytics(app);
                 await signInWithEmailAndPassword(auth, email, password);
                 showMessage('เข้าสู่ระบบสำเร็จ', 'success');
             } catch (error) {
-                showMessage(`เข้าสู่ระบบไม่สำเร็จ: ${error.message}`, 'error');
+                handleAuthError(error);
             }
         });
 
@@ -297,8 +320,8 @@ const analytics = getAnalytics(app);
 
 
 
-
     
+
 
 
 
