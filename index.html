@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>โปรแกรมบัญชีรายรับรายจ่าย</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700&display=swap');
+        body {
+            font-family: 'Sarabun', sans-serif;
+            background-color: #f0f4f8;
+        }
+        .container {
+            max-width: 600px;
+            margin: auto;
+            padding: 1rem;
+        }
+        .shadow-lg {
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+        .transaction-item:nth-child(odd) {
+            background-color: #f8fafc;
+        }
+        .transaction-item:nth-child(even) {
+            background-color: #ffffff;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800">
+
+    <div id="auth-container" class="container bg-white rounded-xl shadow-lg mt-8 p-6">
+        <h1 class="text-3xl font-bold text-center text-teal-600 mb-6">เข้าสู่ระบบ</h1>
+        <div id="message-box" class="hidden mb-4 p-3 rounded-lg text-center" role="alert"></div>
+
+        <div class="mb-4">
+            <input type="email" id="email" placeholder="อีเมล" class="w-full p-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-teal-500">
+        </div>
+        <div class="mb-4">
+            <input type="password" id="password" placeholder="รหัสผ่าน" class="w-full p-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-teal-500">
+        </div>
+        <div class="flex flex-col space-y-4">
+            <button id="loginBtn" class="bg-teal-500 text-white font-semibold py-3 rounded-lg hover:bg-teal-600 transition duration-300">เข้าสู่ระบบ</button>
+            <button id="signupBtn" class="bg-gray-300 text-gray-800 font-semibold py-3 rounded-lg hover:bg-gray-400 transition duration-300">สร้างบัญชีใหม่</button>
+        </div>
+    </div>
+
+    <div id="app-container" class="container bg-white rounded-xl shadow-lg mt-8 p-6 hidden">
+        <div class="flex justify-between items-center mb-6">
+            <h1 class="text-3xl font-bold text-teal-600">บัญชีของฉัน</h1>
+            <button id="logoutBtn" class="text-sm text-gray-500 hover:text-red-500 transition duration-300">ออกจากระบบ</button>
+        </div>
+        
+        <!-- ส่วนสำหรับการเพิ่มรายการ -->
+        <div class="mb-6">
+            <input type="text" id="description" placeholder="รายละเอียด (เช่น: ค่าอาหาร)" class="w-full p-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-teal-500 mb-3">
+            <input type="number" id="amount" placeholder="จำนวนเงิน" class="w-full p-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-teal-500 mb-3">
+            <div class="flex space-x-4 mb-4">
+                <button id="addIncomeBtn" class="flex-1 bg-green-500 text-white font-semibold py-3 rounded-lg hover:bg-green-600 transition duration-300">
+                    เพิ่มรายรับ
+                </button>
+                <button id="addExpenseBtn" class="flex-1 bg-red-500 text-white font-semibold py-3 rounded-lg hover:bg-red-600 transition duration-300">
+                    เพิ่มรายจ่าย
+                </button>
+            </div>
+        </div>
+
+        <!-- ส่วนของยอดคงเหลือ -->
+        <div class="flex justify-between items-center bg-gray-200 rounded-lg p-4 mb-6">
+            <span class="text-lg font-semibold">ยอดคงเหลือ:</span>
+            <span id="balanceDisplay" class="text-2xl font-bold text-teal-600">0.00</span>
+        </div>
+
+        <!-- ส่วนแสดงรายการธุรกรรม -->
+        <div id="transactionsList" class="bg-white rounded-lg shadow-inner overflow-hidden">
+            <div class="text-center text-gray-500 p-4">ไม่มีรายการธุรกรรม</div>
+        </div>
+    </div>
+
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-app.js";
+        import { 
+            getAuth, 
+            createUserWithEmailAndPassword, 
+            signInWithEmailAndPassword, 
+            onAuthStateChanged, 
+            signOut 
+        } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-auth.js";
+        import { 
+            getFirestore, 
+            collection, 
+            addDoc, 
+            onSnapshot, 
+            query, 
+            orderBy, 
+            deleteDoc, 
+            doc 
+        } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-firestore.js";
+
+        // *** เปลี่ยนค่า firebaseConfig ตรงนี้ด้วยค่าจากโปรเจกต์ของคุณเอง ***
+        const firebaseConfig = {
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_AUTH_DOMAIN",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_STORAGE_BUCKET",
+            messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+            appId: "YOUR_APP_ID"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // UI elements
+        const authContainer = document.getElementById('auth-container');
+        const appContainer = document.getElementById('app-container');
+        const emailInput = document.getElementById('email');
+        const passwordInput = document.getElementById('password');
+        const loginBtn = document.getElementById('loginBtn');
+        const signupBtn = document.getElementById('signupBtn');
+        const logoutBtn = document.getElementById('logoutBtn');
+        const messageBox = document.getElementById('message-box');
+
+        const descInput = document.getElementById('description');
+        const amountInput = document.getElementById('amount');
+        const addIncomeBtn = document.getElementById('addIncomeBtn');
+        const addExpenseBtn = document.getElementById('addExpenseBtn');
+        const balanceDisplay = document.getElementById('balanceDisplay');
+        const transactionsList = document.getElementById('transactionsList');
+
+        let userUid = null;
+
+        // ฟังก์ชันแสดงข้อความแจ้งเตือน
+        function showMessage(message, type) {
+            messageBox.textContent = message;
+            messageBox.className = `block mb-4 p-3 rounded-lg text-center ${type === 'error' ? 'bg-red-200 text-red-700' : 'bg-green-200 text-green-700'}`;
+            setTimeout(() => {
+                messageBox.className = 'hidden';
+            }, 3000);
+        }
+
+        // ฟังชันก์สร้างบัญชีใหม่
+        signupBtn.addEventListener('click', async () => {
+            const email = emailInput.value;
+            const password = passwordInput.value;
+            try {
+                await createUserWithEmailAndPassword(auth, email, password);
+                showMessage('สร้างบัญชีสำเร็จ! กรุณาเข้าสู่ระบบ', 'success');
+            } catch (error) {
+                showMessage(`สร้างบัญชีไม่สำเร็จ: ${error.message}`, 'error');
+            }
+        });
+
+        // ฟังก์ชันเข้าสู่ระบบ
+        loginBtn.addEventListener('click', async () => {
+            const email = emailInput.value;
+            const password = passwordInput.value;
+            try {
+                await signInWithEmailAndPassword(auth, email, password);
+                showMessage('เข้าสู่ระบบสำเร็จ', 'success');
+            } catch (error) {
+                showMessage(`เข้าสู่ระบบไม่สำเร็จ: ${error.message}`, 'error');
+            }
+        });
+
+        // ฟังก์ชันออกจากระบบ
+        logoutBtn.addEventListener('click', async () => {
+            await signOut(auth);
+            showMessage('ออกจากระบบสำเร็จ', 'success');
+        });
+
+        // ติดตามสถานะการล็อกอินของผู้ใช้
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                userUid = user.uid;
+                authContainer.classList.add('hidden');
+                appContainer.classList.remove('hidden');
+                setupRealtimeTransactions();
+            } else {
+                userUid = null;
+                authContainer.classList.remove('hidden');
+                appContainer.classList.add('hidden');
+                transactionsList.innerHTML = '<div class="text-center text-gray-500 p-4">ไม่มีรายการธุรกรรม</div>';
+                balanceDisplay.textContent = '0.00';
+            }
+        });
+
+        // ฟังก์ชันสำหรับเพิ่มรายการธุรกรรม
+        async function addTransaction(type) {
+            const description = descInput.value;
+            const amount = parseFloat(amountInput.value);
+            
+            if (description && !isNaN(amount) && amount > 0) {
+                try {
+                    await addDoc(collection(db, `users/${userUid}/transactions`), {
+                        description,
+                        amount,
+                        type,
+                        timestamp: Date.now()
+                    });
+                    descInput.value = '';
+                    amountInput.value = '';
+                } catch (error) {
+                    console.error("Error adding document: ", error);
+                }
+            } else {
+                showMessage('กรุณากรอกข้อมูลให้ครบถ้วนและถูกต้อง', 'error');
+            }
+        }
+        
+        addIncomeBtn.addEventListener('click', () => addTransaction('income'));
+        addExpenseBtn.addEventListener('click', () => addTransaction('expense'));
+
+        // ฟังก์ชันสำหรับดึงข้อมูลและแสดงผลแบบเรียลไทม์
+        function setupRealtimeTransactions() {
+            const q = query(
+                collection(db, `users/${userUid}/transactions`),
+                orderBy('timestamp', 'desc')
+            );
+            
+            onSnapshot(q, (snapshot) => {
+                const transactions = [];
+                snapshot.forEach(doc => {
+                    transactions.push({ id: doc.id, ...doc.data() });
+                });
+                displayTransactions(transactions);
+            });
+        }
+
+        // ฟังก์ชันสำหรับแสดงรายการธุรกรรมบนหน้าจอ
+        function displayTransactions(transactions) {
+            transactionsList.innerHTML = '';
+            if (transactions.length === 0) {
+                transactionsList.innerHTML = '<div class="text-center text-gray-500 p-4">ไม่มีรายการธุรกรรม</div>';
+                balanceDisplay.textContent = '0.00';
+                return;
+            }
+
+            let balance = 0;
+            transactions.forEach(tx => {
+                const isIncome = tx.type === 'income';
+                balance += isIncome ? tx.amount : -tx.amount;
+
+                const item = document.createElement('div');
+                const amountClass = isIncome ? 'text-green-600' : 'text-red-600';
+                const amountSign = isIncome ? '+' : '-';
+                
+                item.className = `transaction-item p-4 border-b last:border-b-0 flex justify-between items-center`;
+                item.innerHTML = `
+                    <div>
+                        <div class="text-lg font-semibold">${tx.description}</div>
+                        <div class="text-sm text-gray-500">${new Date(tx.timestamp).toLocaleDateString('th-TH')}</div>
+                    </div>
+                    <div class="flex items-center space-x-3">
+                        <div class="text-lg font-bold ${amountClass}">${amountSign}${tx.amount.toFixed(2)}</div>
+                        <button class="delete-btn text-gray-400 hover:text-red-500" data-id="${tx.id}">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm6 0a1 1 0 012 0v6a1 1 0 11-2 0V8z" clip-rule="evenodd" />
+                            </svg>
+                        </button>
+                    </div>
+                `;
+                transactionsList.appendChild(item);
+            });
+
+            // เพิ่ม Event Listener สำหรับปุ่มลบ
+            document.querySelectorAll('.delete-btn').forEach(button => {
+                button.addEventListener('click', async (event) => {
+                    const id = event.currentTarget.dataset.id;
+                    if (confirm('ยืนยันการลบรายการนี้?')) {
+                        await deleteDoc(doc(db, `users/${userUid}/transactions`, id));
+                    }
+                });
+            });
+
+            // อัปเดตยอดคงเหลือ
+            const currentBalance = transactions.reduce((sum, tx) => tx.type === 'income' ? sum + tx.amount : sum - tx.amount, 0);
+            balanceDisplay.textContent = currentBalance.toFixed(2);
+        }
+    </script>
+</body>
+</html>
+```
+eof
+
+---
+
+### **ขั้นตอนที่ 3: อัปโหลดขึ้น GitHub**
+
+1.  **ติดตั้ง Git**: หากคุณยังไม่ได้ติดตั้ง Git บนคอมพิวเตอร์ ให้ติดตั้งก่อน.
+2.  **สร้าง Repository ใหม่**: ไปที่ **`https://github.com/`** และสร้าง Repository ใหม่ (ตั้งชื่อตามโปรเจกต์ของคุณ).
+3.  **เริ่มต้น Git ในโปรเจกต์**: เปิด Terminal หรือ Command Prompt ที่โฟลเดอร์โปรเจกต์ของคุณ แล้วรันคำสั่ง:
+    ```bash
+    git init
+    git add .
+    git commit -m "Initial commit for financial tracker app"
+    
